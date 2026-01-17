@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import * as cdk from 'aws-cdk-lib/core';
-import { AcFnVideoThumbsMakerStack } from '../lib/ac-fn-video-thumbs-maker-stack';
+import { AcFnVideoThumbsMakerStack } from '../lib/ac-fn-video-encoder-stack';
 
 const app = new cdk.App();
 new AcFnVideoThumbsMakerStack(app, 'AcFnVideoThumbsMakerStack', {
