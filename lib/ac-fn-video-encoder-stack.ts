@@ -3,6 +3,7 @@ import * as lambda from "aws-cdk-lib/aws-lambda";
 import { Construct } from "constructs";
 import { QueueLambdaConstruct } from "@aspan-corporation/ac-shared-cdk";
 import * as path from "path";
+import * as logs from "aws-cdk-lib/aws-logs";
 
 export class AcFnVideoEncoderStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -15,6 +16,7 @@ export class AcFnVideoEncoderStack extends cdk.Stack {
       {
         entry: path.join(__dirname, "../src/video-encoder/app.ts"),
         handler: "handler",
+        logGroupRemovalPolicy: cdk.RemovalPolicy.DESTROY,
         memorySize: 2048, // More memory for video processing
         timeout: cdk.Duration.minutes(5),
         batchSize: 1, // Process one video at a time
