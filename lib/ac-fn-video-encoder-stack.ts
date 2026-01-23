@@ -13,8 +13,8 @@ export class AcFnVideoEncoderStack extends cdk.Stack {
       this,
       "VideoEncoderProcessor",
       {
-        nodejsEntry: path.join(__dirname, "../src/video-encoder/app.ts"),
-        handler: "app.handler",
+        entry: path.join(__dirname, "../src/video-encoder/app.ts"),
+        handler: "handler",
         memorySize: 2048, // More memory for video processing
         timeout: cdk.Duration.minutes(5),
         batchSize: 1, // Process one video at a time
