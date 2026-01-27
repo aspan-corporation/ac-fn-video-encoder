@@ -1,5 +1,4 @@
-import { S3Service, MetricUnit } from "@aspan-corporation/ac-shared";
-import { Context } from "aws-lambda";
+import { AcContext, MetricUnit, S3Service } from "@aspan-corporation/ac-shared";
 import { spawn } from "child_process";
 
 const FFMPEG_PATH = "/opt/bin/ffmpeg";
@@ -24,7 +23,7 @@ export const encodeVideo = async (
     destinationS3Service,
     sourceS3Service,
   }: EncodeVideoParams,
-  { logger, metrics }: Context,
+  { logger, metrics }: AcContext,
 ) => {
   logger.debug("VideoEncodingsStarted", { sourceKey });
   metrics.addMetric("VideoEncodingsStarted", MetricUnit.Count, 1);
