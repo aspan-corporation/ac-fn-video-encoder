@@ -1,14 +1,10 @@
 import {
+  AcContext,
   assertEnvVar,
   getEncodedVideoKey,
   isAllowedVideoExtension,
-  AcContext,
 } from "@aspan-corporation/ac-shared";
-import {
-  Handler,
-  S3ObjectCreatedNotificationEvent,
-  SQSRecord,
-} from "aws-lambda";
+import type { S3ObjectCreatedNotificationEvent, SQSRecord } from "aws-lambda";
 import createError from "http-errors";
 import assert from "node:assert/strict";
 import { encodeVideo } from "./encodeVideo.js";
