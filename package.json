@@ -46,8 +46,8 @@
   "dependencies": {
     "@aspan-corporation/ac-shared": "file:../ac-shared",
     "@aspan-corporation/ac-shared-cdk": "file:../ac-shared-cdk/aspan-corporation-ac-shared-cdk-0.1.0.tgz",
-    "@aws-lambda-powertools/idempotency": "^2.30.0",
     "aws-cdk-lib": "2.232.1",
+    "aws-lambda": "^1.0.7",
     "constructs": "^10.0.0",
     "esbuild": "^0.17.6",
     "http-errors": "^2.0.1"

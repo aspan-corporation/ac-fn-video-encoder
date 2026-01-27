@@ -6,8 +6,8 @@ import {
   S3Service,
   STSService,
   withMiddlewares,
+  makeIdempotent,
 } from "@aspan-corporation/ac-shared";
-import { makeIdempotent } from "@aws-lambda-powertools/idempotency";
 import { recordHandler } from "./recordHandler.js";
 
 const region = process.env.AWS_REGION || "us-east-1";
