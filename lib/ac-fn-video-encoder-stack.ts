@@ -1,5 +1,6 @@
 import * as cdk from "aws-cdk-lib";
 import * as lambda from "aws-cdk-lib/aws-lambda";
+import * as ssm from "aws-cdk-lib/aws-ssm";
 import { Construct } from "constructs";
 import { QueueLambdaConstruct } from "@aspan-corporation/ac-shared-cdk";
 import * as path from "path";
@@ -24,7 +25,10 @@ export class AcFnVideoEncoderStack extends cdk.Stack {
         // reservedConcurrentExecutions: 10, // Removed: account doesn't have enough unreserved concurrency
         environment: {
           LOG_LEVEL: "INFO",
-          // Add more environment variables as needed
+          DESTINATION_BUCKET_NAME: ssm.StringParameter.valueForStringParameter(
+            this,
+            "/ac/storage/thumbs-bucket-name",
+          ),
         },
       },
     );
