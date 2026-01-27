@@ -2,6 +2,7 @@ import {
   assertEnvVar,
   getEncodedVideoKey,
   isAllowedVideoExtension,
+  AcContext,
 } from "@aspan-corporation/ac-shared";
 import {
   Handler,
@@ -14,9 +15,9 @@ import { encodeVideo } from "./encodeVideo.js";
 
 const destinationBucket = assertEnvVar("DESTINATION_BUCKET_NAME");
 
-export const recordHandler: Handler = async (
+export const recordHandler = async (
   record: SQSRecord,
-  context,
+  context: AcContext,
 ): Promise<object> => {
   const { sourceS3Service, destinationS3Service } = context.acServices || {};
   assert(sourceS3Service, "s3Service is required in servicesContext");
