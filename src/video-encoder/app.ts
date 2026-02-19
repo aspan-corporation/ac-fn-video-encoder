@@ -20,11 +20,13 @@ const partialHandler = getPartialResponseHandler(idempotentRecordHandler);
 export const handler = withMiddlewares(partialHandler).use({
   before: async ({ context }) => {
     const { logger } = context;
+
     const stsService = new STSService({ region, logger });
 
     const assumeRoleCommandOutput = await stsService.assumeRole({
       RoleArn: assertEnvVar("AC_TAU_MEDIA_MEDIA_BUCKET_ACCESS_ROLE_ARN"),
-      RoleSessionName: "extract-meta-data",
+      RoleSessionName: "ac-fn-video-encoder",
+      ExternalId: "ac",
     });
 
     const sourceS3Service = new S3Service({

@@ -5,7 +5,6 @@ import {
   isAllowedVideoExtension,
 } from "@aspan-corporation/ac-shared";
 import type { S3ObjectCreatedNotificationEvent, SQSRecord } from "aws-lambda";
-import createError from "http-errors";
 import assert from "node:assert/strict";
 import { encodeVideo } from "./encodeVideo.js";
 
@@ -34,9 +33,7 @@ export const recordHandler = async (
   } = item as S3ObjectCreatedNotificationEvent;
 
   if (!isAllowedVideoExtension(sourceKey)) {
-    throw createError.UnprocessableEntity(
-      `extension for ${sourceKey} is not supported`,
-    );
+    throw new Error(`extension for ${sourceKey} is not supported`);
   }
 
   const destinationKey = getEncodedVideoKey({

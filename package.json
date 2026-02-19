@@ -24,7 +24,7 @@
     "clean": "npm run clean:tsc && npm run clean:cdk"
   },
   "devDependencies": {
-    "@aspan-corporation/ac-shared-cdk": "file:../ac-shared-cdk/aspan-corporation-ac-shared-cdk-0.1.0.tgz",
+    "@aspan-corporation/ac-shared-cdk": "file:../ac-shared-cdk",
     "@aws-lambda-powertools/batch": "^2.29.0",
     "@types/aws-lambda": "^8.10.159",
     "@types/http-errors": "^2.0.5",
@@ -34,6 +34,7 @@
     "@typescript-eslint/parser": "^8.47.0",
     "aws-cdk": "2.1100.1",
     "aws-cdk-lib": "2.232.1",
+    "esbuild": "^0.17.6",
     "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.4",
@@ -42,11 +43,9 @@
     "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2",
     "typescript": "~5.9.3",
-    "esbuild": "^0.17.6",
     "typescript-eslint": "^8.47.0"
   },
   "dependencies": {
-    "@aspan-corporation/ac-shared": "file:../ac-shared",
-    "http-errors": "^2.0.1"
+    "@aspan-corporation/ac-shared": "file:../ac-shared"
   }
 }
