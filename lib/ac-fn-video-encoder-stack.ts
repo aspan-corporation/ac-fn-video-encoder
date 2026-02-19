@@ -99,6 +99,19 @@ export class AcFnVideoEncoderStack extends cdk.Stack {
       }),
     );
 
+    // Allow Lambda to put objects to thumbs bucket
+    const thumbsBucketArn = ssm.StringParameter.valueForStringParameter(
+      this,
+      "/ac/storage/thumbs-bucket-arn",
+    );
+
+    videoEncoderProcessor.processor.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["s3:PutObject"],
+        resources: [`${thumbsBucketArn}/*`],
+      }),
+    );
+
     // Export the queue URL for external access
     new cdk.CfnOutput(this, "VideoProcessingQueueUrl", {
       value: videoEncoderProcessor.queue.queueUrl,
