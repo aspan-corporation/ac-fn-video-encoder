@@ -18,6 +18,17 @@ export class AcFnVideoEncoderStack extends cdk.Stack {
       "/ac/layers/ffmpeg/arn",
     );
 
+    // Get centralized log group from monitoring stack
+    const centralLogGroupName = ssm.StringParameter.valueForStringParameter(
+      this,
+      "/ac/monitoring/central-log-group-name",
+    );
+    const centralLogGroup = logs.LogGroup.fromLogGroupName(
+      this,
+      "CentralLogGroup",
+      centralLogGroupName,
+    );
+
     // Create the Queue + Lambda construct for video encoding processing
     const videoEncoderProcessor = new QueueLambdaConstruct(
       this,
@@ -25,7 +36,7 @@ export class AcFnVideoEncoderStack extends cdk.Stack {
       {
         entry: path.join(__dirname, "../src/video-encoder/app.ts"),
         handler: "handler",
-        logGroupRemovalPolicy: cdk.RemovalPolicy.DESTROY,
+        logGroup: centralLogGroup,
         memorySize: 2048, // More memory for video processing
         timeout: cdk.Duration.minutes(5), // Max Lambda timeout
         batchSize: 1, // Process one video at a time
