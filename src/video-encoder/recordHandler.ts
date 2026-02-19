@@ -13,7 +13,7 @@ const destinationBucket = assertEnvVar("DESTINATION_BUCKET_NAME");
 export const recordHandler = async (
   record: SQSRecord,
   context: AcContext,
-): Promise<object> => {
+): Promise<void> => {
   const { sourceS3Service, destinationS3Service } = context.acServices || {};
   assert(sourceS3Service, "s3Service is required in servicesContext");
   assert(
@@ -51,6 +51,4 @@ export const recordHandler = async (
     },
     context,
   );
-
-  return { statusCode: 200, body: "Video encoded successfully" };
 };
