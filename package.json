@@ -27,7 +27,6 @@
     "@aspan-corporation/ac-shared-cdk": "file:../ac-shared-cdk",
     "@aws-lambda-powertools/batch": "^2.29.0",
     "@types/aws-lambda": "^8.10.159",
-    "@types/http-errors": "^2.0.5",
     "@types/jest": "^29.5.14",
     "@types/node": "^24.10.1",
     "@typescript-eslint/eslint-plugin": "^8.47.0",
