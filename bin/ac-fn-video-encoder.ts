@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import * as cdk from "aws-cdk-lib/core";
-import { AcFnVideoEncoderStack } from "../lib/ac-fn-video-encoder-stack.js";
+import { AcFnVideoEncoderStack } from "../lib/ac-fn-video-encoder-stack.ts";
 
 const app = new cdk.App();
 new AcFnVideoEncoderStack(app, "AcFnVideoEncoderStack", {

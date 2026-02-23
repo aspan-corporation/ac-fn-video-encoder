@@ -23,14 +23,14 @@ export class AcFnVideoEncoderStack extends cdk.Stack {
     );
 
     // Get centralized log group from monitoring stack
-    const centralLogGroupName = ssm.StringParameter.valueForStringParameter(
+    const centralLogGroupArn = ssm.StringParameter.valueForStringParameter(
       this,
-      "/ac/monitoring/central-log-group-name",
+      "/ac/monitoring/central-log-group-arn",
     );
-    const centralLogGroup = logs.LogGroup.fromLogGroupName(
+    const centralLogGroup = logs.LogGroup.fromLogGroupArn(
       this,
       "CentralLogGroup",
-      centralLogGroupName,
+      centralLogGroupArn,
     );
 
     // Create the Queue + Lambda construct for video encoding processing
