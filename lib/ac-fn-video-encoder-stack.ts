@@ -128,10 +128,9 @@ export class AcFnVideoEncoderStack extends cdk.Stack {
     );
 
     // Export the queue URL for external access
-    new cdk.CfnOutput(this, "VideoProcessingQueueUrl", {
-      value: videoEncoderProcessor.queue.queueUrl,
-      description: "URL of the video processing queue",
-      exportName: "VideoProcessingQueueUrl",
+    new ssm.StringParameter(this, "VideoThumbnailProcessingQueueUrlParameter", {
+      parameterName: "/ac/video-encoder/queue-url",
+      stringValue: videoEncoderProcessor.queue.queueUrl,
     });
   }
 }
