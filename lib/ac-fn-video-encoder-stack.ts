@@ -6,7 +6,11 @@ import * as ssm from "aws-cdk-lib/aws-ssm";
 import { Construct } from "constructs";
 import { QueueLambdaConstruct } from "@aspan-corporation/ac-shared-cdk";
 import * as path from "path";
+import { fileURLToPath } from "node:url";
 import * as logs from "aws-cdk-lib/aws-logs";
+
+const currentFilePath = fileURLToPath(import.meta.url);
+const currentDirPath = path.dirname(currentFilePath);
 
 export class AcFnVideoEncoderStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -34,7 +38,7 @@ export class AcFnVideoEncoderStack extends cdk.Stack {
       this,
       "VideoEncoderProcessor",
       {
-        entry: path.join(__dirname, "../src/video-encoder/app.ts"),
+        entry: path.join(currentDirPath, "../src/video-encoder/app.ts"),
         handler: "handler",
         logGroup: centralLogGroup,
         memorySize: 2048, // More memory for video processing

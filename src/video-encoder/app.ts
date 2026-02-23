@@ -8,6 +8,7 @@ import {
   withMiddlewares,
   makeIdempotent,
 } from "@aspan-corporation/ac-shared";
+import type { Handler } from "aws-lambda";
 import { recordHandler } from "./recordHandler.js";
 
 const region = process.env.AWS_REGION || "us-east-1";
@@ -17,7 +18,7 @@ const idempotentRecordHandler = makeIdempotent(
 );
 const partialHandler = getPartialResponseHandler(idempotentRecordHandler);
 
-export const handler = withMiddlewares(partialHandler).use({
+export const handler: Handler = withMiddlewares(partialHandler).use({
   before: async ({ context }) => {
     const { logger } = context;
 

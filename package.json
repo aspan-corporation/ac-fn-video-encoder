@@ -4,6 +4,7 @@
   "bin": {
     "ac-fn-video-encoder": "bin/ac-fn-video-encoder.js"
   },
+  "type": "module",
   "scripts": {
     "build": "tsc",
     "cdk": "cdk",
