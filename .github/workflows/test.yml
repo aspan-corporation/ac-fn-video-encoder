@@ -3,10 +3,18 @@ name: Test
 on:
   push:
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::433003433222:role/ac-github-oidc
+          aws-region: us-east-1
       - run: ls
       - run: aws sts get-caller-identity
