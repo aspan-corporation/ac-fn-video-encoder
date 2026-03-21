@@ -1,4 +1,4 @@
-name: Test
+name: Test and Deploy
 
 on:
   push:
@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,5 +16,8 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::433003433222:role/ac-github-oidc
           aws-region: us-east-1
-      - run: ls
-      - run: aws sts get-caller-identity
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run deploy
