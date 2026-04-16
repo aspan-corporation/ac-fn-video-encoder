@@ -25,7 +25,7 @@ const detectVideoCodec = async (
     "-show_entries", "stream=codec_name",
     "-v", "quiet",
     "-of", "csv=p=0",
-  ]);
+  ], { timeout: 270000 });
 
   return new Promise((resolve, reject) => {
     let output = "";
@@ -81,26 +81,27 @@ export const encodeVideo = async (
     "pipe:1",
   ];
 
-  const ffmpeg = spawn(FFMPEG_PATH, ffmpegArgs);
+  const ffmpeg = spawn(FFMPEG_PATH, ffmpegArgs, { timeout: 270000 });
 
   ffmpeg.stdout.pipe(stream);
 
-  const stderrChunks: string[] = [];
+  const stderrLines: string[] = [];
+  const MAX_STDERR_LINES = 50;
   ffmpeg.stderr.on("data", (d) => {
     const line = d.toString();
-    stderrChunks.push(line);
-    if (!line.includes("frame=")) {
-      logger.info(line);
-    }
+    stderrLines.push(line);
+    if (stderrLines.length > MAX_STDERR_LINES) stderrLines.shift();
+    if (!line.includes("frame=")) logger.info(line);
   });
 
+  let settled = false;
   const exitCode = await new Promise((resolve, reject) => {
-    ffmpeg.on("close", resolve);
-    ffmpeg.on("error", reject);
+    ffmpeg.on("close", (code) => { if (!settled) { settled = true; resolve(code); } });
+    ffmpeg.on("error", (err) => { if (!settled) { settled = true; reject(err); } });
   });
 
   if (exitCode !== 0) {
-    const lastStderr = stderrChunks.slice(-5).join("\n");
+    const lastStderr = stderrLines.slice(-5).join("\n");
     logger.error("FFmpeg stderr output", { lastStderr, exitCode });
     throw new Error(`FFmpeg failed with code ${exitCode}: ${lastStderr}`);
   }
