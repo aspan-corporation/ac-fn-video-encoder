@@ -22,7 +22,9 @@
     "start:watch": "npx nodemon --ext 'ts' --exec ts-node-esm index.ts",
     "clean:tsc": "find . -type f \\( -name '*.js' -o -name '*.d.ts' -o -name '*.js.map' \\) ! -path './node_modules/*' ! -path './cdk.out/*' ! -name 'jest.config.js' ! -name 'eslint.config.js' -delete",
     "clean:cdk": "rm -rf cdk.out",
-    "clean": "npm run clean:tsc && npm run clean:cdk"
+    "clean": "find src -name \"*.js\" -delete && find src -name \"*.d.ts\" -delete",
+    "predeploy": "npm run clean",
+    "prebuild": "npm run clean"
   },
   "devDependencies": {
     "@aspan-corporation/ac-shared-cdk": "^0.1.1",
@@ -46,6 +48,6 @@
     "typescript-eslint": "^8.47.0"
   },
   "dependencies": {
-    "@aspan-corporation/ac-shared": "^1.2.21"
+    "@aspan-corporation/ac-shared": "^1.2.24"
   }
 }

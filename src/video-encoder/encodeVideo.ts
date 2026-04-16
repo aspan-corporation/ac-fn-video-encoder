@@ -2,6 +2,8 @@ import { AcContext, MetricUnit, S3Service } from "@aspan-corporation/ac-shared";
 import { spawn } from "child_process";
 
 const FFMPEG_PATH = "/opt/bin/ffmpeg";
+const FFPROBE_PATH = "/opt/bin/ffprobe";
+
 type EncodeVideoParams = {
   sourceS3Service: S3Service;
   sourceBucket: string;
@@ -12,7 +14,34 @@ type EncodeVideoParams = {
 };
 
 /**
- * Resizes an image and uploads it to S3. Output is always in JPEG format.
+ * Detect the video codec of the source file using ffprobe.
+ */
+const detectVideoCodec = async (
+  signedUrl: string,
+): Promise<string> => {
+  const ffprobe = spawn(FFPROBE_PATH, [
+    "-i", signedUrl,
+    "-select_streams", "v:0",
+    "-show_entries", "stream=codec_name",
+    "-v", "quiet",
+    "-of", "csv=p=0",
+  ]);
+
+  return new Promise((resolve, reject) => {
+    let output = "";
+    ffprobe.stdout.on("data", (d) => { output += d.toString(); });
+    ffprobe.on("close", (code) => {
+      if (code === 0) resolve(output.trim());
+      else reject(new Error(`ffprobe exited with code ${code}`));
+    });
+    ffprobe.on("error", reject);
+  });
+};
+
+/**
+ * Re-mux or re-encode a video into fragmented MP4 for browser streaming.
+ * - h264 sources: re-mux only (-c copy), completes in seconds
+ * - hevc/other sources: re-encode to h264 for MSE compatibility
  */
 export const encodeVideo = async (
   {
@@ -28,30 +57,41 @@ export const encodeVideo = async (
   logger.debug("VideoEncodingsStarted", { sourceKey });
   metrics.addMetric("VideoEncodingsStarted", MetricUnit.Count, 1);
 
-  const { stream, done } = destinationS3Service.createS3UploadStream({
-    Bucket: destinationBucket,
-    Key: destinationKey,
-  });
-
   const signedSourceUrl = await sourceS3Service.getSignedUrl({
     Bucket: sourceBucket,
     Key: sourceKey,
   });
 
-  const ffmpeg = spawn(FFMPEG_PATH, [
-    "-i",
-    signedSourceUrl,
-    "-movflags",
-    "frag_keyframe+empty_moov+default_base_moof",
-    "-f",
-    "mp4",
+  const codec = await detectVideoCodec(signedSourceUrl);
+  const canCopyStream = codec === "h264";
+  logger.debug("detected video codec", { codec, canCopyStream });
+
+  const { stream, done } = destinationS3Service.createS3UploadStream({
+    Bucket: destinationBucket,
+    Key: destinationKey,
+  });
+
+  const ffmpegArgs = [
+    "-i", signedSourceUrl,
+    ...(canCopyStream
+      ? ["-c", "copy"]
+      : ["-c:v", "libx264", "-preset", "fast", "-c:a", "aac", "-b:a", "128k"]),
+    "-movflags", "frag_keyframe+empty_moov+default_base_moof",
+    "-f", "mp4",
     "pipe:1",
-  ]);
+  ];
+
+  const ffmpeg = spawn(FFMPEG_PATH, ffmpegArgs);
 
   ffmpeg.stdout.pipe(stream);
 
+  const stderrChunks: string[] = [];
   ffmpeg.stderr.on("data", (d) => {
-    // !d.toString().includes("frame=") && logger.info(d.toString());
+    const line = d.toString();
+    stderrChunks.push(line);
+    if (!line.includes("frame=")) {
+      logger.info(line);
+    }
   });
 
   const exitCode = await new Promise((resolve, reject) => {
@@ -60,7 +100,9 @@ export const encodeVideo = async (
   });
 
   if (exitCode !== 0) {
-    throw new Error(`FFmpeg failed with code ${exitCode}`);
+    const lastStderr = stderrChunks.slice(-5).join("\n");
+    logger.error("FFmpeg stderr output", { lastStderr, exitCode });
+    throw new Error(`FFmpeg failed with code ${exitCode}: ${lastStderr}`);
   }
 
   await done;
@@ -68,6 +110,8 @@ export const encodeVideo = async (
   logger.debug("VideoEncodingsFinished", {
     exitCode,
     sourceKey,
+    codec,
+    canCopyStream,
   });
   metrics.addMetric("VideoEncodingsFinished", MetricUnit.Count, 1);
 

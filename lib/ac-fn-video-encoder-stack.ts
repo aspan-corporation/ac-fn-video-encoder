@@ -45,7 +45,7 @@ export class AcFnVideoEncoderStack extends cdk.Stack {
         timeout: cdk.Duration.minutes(5), // Max Lambda timeout
         batchSize: 1, // Process one video at a time
         maxReceiveCount: 3, // Retry up to 3 times before sending to DLQ
-        // reservedConcurrentExecutions: 10, // Removed: account doesn't have enough unreserved concurrency
+        reservedConcurrentExecutions: 5,
         layers: [
           lambda.LayerVersion.fromLayerVersionArn(
             this,
