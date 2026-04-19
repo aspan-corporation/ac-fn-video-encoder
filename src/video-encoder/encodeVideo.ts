@@ -76,7 +76,7 @@ export const encodeVideo = async (
     ...(canCopyStream
       ? ["-c", "copy"]
       : ["-c:v", "libx264", "-preset", "fast", "-c:a", "aac", "-b:a", "128k"]),
-    "-movflags", "frag_keyframe+empty_moov+default_base_moof",
+    "-movflags", "frag_keyframe+default_base_moof",
     "-f", "mp4",
     "pipe:1",
   ];

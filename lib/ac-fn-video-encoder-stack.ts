@@ -41,11 +41,14 @@ export class AcFnVideoEncoderStack extends cdk.Stack {
         entry: path.join(currentDirPath, "../src/video-encoder/app.ts"),
         handler: "handler",
         logGroup: centralLogGroup,
-        memorySize: 2048, // More memory for video processing
-        timeout: cdk.Duration.minutes(5), // Max Lambda timeout
+        memorySize: 2048,
+        timeout: cdk.Duration.minutes(15),
         batchSize: 1, // Process one video at a time
         maxReceiveCount: 3, // Retry up to 3 times before sending to DLQ
-        reservedConcurrentExecutions: 5,
+        reservedConcurrentExecutions: 15,
+        nodejsOptions: {
+          ephemeralStorageSize: cdk.Size.mebibytes(2048),
+        },
         layers: [
           lambda.LayerVersion.fromLayerVersionArn(
             this,
