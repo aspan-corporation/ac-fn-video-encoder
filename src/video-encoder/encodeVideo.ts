@@ -74,9 +74,9 @@ export const encodeVideo = async (
   const ffmpegArgs = [
     "-i", signedSourceUrl,
     ...(canCopyStream
-      ? ["-c", "copy"]
-      : ["-c:v", "libx264", "-preset", "fast", "-c:a", "aac", "-b:a", "128k"]),
-    "-movflags", "frag_keyframe+default_base_moof",
+      ? ["-c:v", "copy", "-c:a", "aac", "-ar", "48000", "-ac", "2", "-b:a", "128k"]
+      : ["-c:v", "libx264", "-preset", "fast", "-c:a", "aac", "-ar", "48000", "-ac", "2", "-b:a", "128k"]),
+    "-movflags", "frag_keyframe+empty_moov+default_base_moof",
     "-f", "mp4",
     "pipe:1",
   ];
