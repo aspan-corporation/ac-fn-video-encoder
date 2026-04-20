@@ -69,6 +69,7 @@ export const encodeVideo = async (
   const { stream, done } = destinationS3Service.createS3UploadStream({
     Bucket: destinationBucket,
     Key: destinationKey,
+    ContentType: "video/mp4",
   });
 
   const ffmpegArgs = [
