@@ -1,6 +1,7 @@
 import {
   AcServices,
   assertEnvVar,
+  DynamoDBService,
   getIdempotencyOptions,
   getPartialResponseHandler,
   S3Service,
@@ -41,9 +42,12 @@ export const handler: Handler = withMiddlewares(partialHandler).use({
       logger,
     });
 
+    const dynamoDBService = new DynamoDBService({ region, logger });
+
     const acServices: AcServices = {
       sourceS3Service,
       destinationS3Service,
+      dynamoDBService,
     };
 
     context.acServices = acServices;
