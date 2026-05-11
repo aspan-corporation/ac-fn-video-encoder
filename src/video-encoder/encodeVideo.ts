@@ -16,9 +16,7 @@ type EncodeVideoParams = {
 /**
  * Detect the video codec of the source file using ffprobe.
  */
-const detectVideoCodec = async (
-  signedUrl: string,
-): Promise<string> => {
+const detectVideoCodec = async (signedUrl: string): Promise<string> => {
   const ffprobe = spawn(FFPROBE_PATH, [
     "-i", signedUrl,
     "-select_streams", "v:0",
@@ -36,6 +34,41 @@ const detectVideoCodec = async (
     });
     ffprobe.on("error", reject);
   });
+};
+
+/**
+ * Read the rotation angle (0 / 90 / 180 / 270) stored in the video
+ * container's side-data. Returns 0 if none is present.
+ */
+const detectRotation = async (signedUrl: string): Promise<number> => {
+  const ffprobe = spawn(FFPROBE_PATH, [
+    "-i", signedUrl,
+    "-select_streams", "v:0",
+    "-show_entries", "stream_side_data=rotation",
+    "-v", "quiet",
+    "-of", "csv=p=0",
+  ], { timeout: 30000 });
+
+  return new Promise((resolve) => {
+    let output = "";
+    ffprobe.stdout.on("data", (d) => { output += d.toString(); });
+    ffprobe.on("close", () => {
+      const angle = parseInt(output.trim(), 10);
+      // Rotation stored as negative in some containers (e.g. -90 = 90 CW)
+      resolve(isNaN(angle) ? 0 : ((angle % 360) + 360) % 360);
+    });
+    ffprobe.on("error", () => resolve(0));
+  });
+};
+
+/** Map rotation angle to FFmpeg transpose filter arguments. */
+const rotationToVf = (degrees: number): string[] => {
+  switch (degrees) {
+    case 90:  return ["-vf", "transpose=1"];           // 90° CW
+    case 180: return ["-vf", "transpose=1,transpose=1"]; // 180°
+    case 270: return ["-vf", "transpose=2"];           // 90° CCW
+    default:  return [];
+  }
 };
 
 /**
@@ -62,9 +95,17 @@ export const encodeVideo = async (
     Key: sourceKey,
   });
 
-  const codec = await detectVideoCodec(signedSourceUrl);
-  const canCopyStream = codec === "h264";
-  logger.debug("detected video codec", { codec, canCopyStream });
+  const [codec, rotation] = await Promise.all([
+    detectVideoCodec(signedSourceUrl),
+    detectRotation(signedSourceUrl),
+  ]);
+
+  // Stream copy is only possible when there is nothing to re-encode.
+  // If rotation must be baked in (browsers that ignore container rotate
+  // metadata), we must re-encode — video filters are incompatible with -c copy.
+  const vfArgs = rotationToVf(rotation);
+  const canCopyStream = codec === "h264" && vfArgs.length === 0;
+  logger.debug("detected video properties", { codec, rotation, canCopyStream });
 
   const { stream, done } = destinationS3Service.createS3UploadStream({
     Bucket: destinationBucket,
@@ -76,7 +117,7 @@ export const encodeVideo = async (
     "-i", signedSourceUrl,
     ...(canCopyStream
       ? ["-c:v", "copy", "-c:a", "aac", "-ar", "48000", "-ac", "2", "-b:a", "128k"]
-      : ["-c:v", "libx264", "-preset", "fast", "-c:a", "aac", "-ar", "48000", "-ac", "2", "-b:a", "128k"]),
+      : ["-c:v", "libx264", "-preset", "fast", ...vfArgs, "-c:a", "aac", "-ar", "48000", "-ac", "2", "-b:a", "128k"]),
     "-movflags", "frag_keyframe+empty_moov+default_base_moof",
     "-f", "mp4",
     "pipe:1",
