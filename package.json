@@ -49,6 +49,7 @@
   },
   "dependencies": {
     "@aspan-corporation/ac-shared": "^1.2.24",
+    "@aws-sdk/client-cloudfront": "^3.1048.0",
     "@aws-sdk/client-sfn": "^3.1045.0"
   }
 }

@@ -78,6 +78,11 @@ export class AcFnVideoEncoderStack extends cdk.Stack {
               this,
               "/ac/iam/media-bucket-access-role-arn",
             ),
+          CLOUDFRONT_DISTRIBUTION_ID:
+            ssm.StringParameter.valueForStringParameter(
+              this,
+              "/ac/cloudfront/distribution-id",
+            ),
         },
       },
     );
@@ -149,8 +154,27 @@ export class AcFnVideoEncoderStack extends cdk.Stack {
 
     videoEncoderProcessor.processor.addToRolePolicy(
       new iam.PolicyStatement({
-        actions: ["s3:PutObject"],
+        // GetObject covers the HeadObject we use before encoding to detect
+        // whether the destination already exists (for conditional CloudFront
+        // invalidation). PutObject is for writing the encoded MP4.
+        actions: ["s3:PutObject", "s3:GetObject"],
         resources: [`${thumbsBucketArn}/*`],
+      }),
+    );
+
+    // Allow Lambda to invalidate the encoded video's CloudFront path after
+    // overwriting an object in the thumbs bucket. Without this, edge caches
+    // continue serving the previous version until natural TTL expiry.
+    const cloudFrontDistributionId = ssm.StringParameter.valueForStringParameter(
+      this,
+      "/ac/cloudfront/distribution-id",
+    );
+    videoEncoderProcessor.processor.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["cloudfront:CreateInvalidation"],
+        resources: [
+          `arn:aws:cloudfront::${this.account}:distribution/${cloudFrontDistributionId}`,
+        ],
       }),
     );
 
