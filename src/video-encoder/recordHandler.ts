@@ -32,7 +32,7 @@ export const recordHandler = async (
 
   const {
     detail: {
-      object: { key: sourceKey, size },
+      object: { key: sourceKey },
       bucket: { name: sourceBucket },
     },
   } = item;
