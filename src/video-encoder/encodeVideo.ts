@@ -223,7 +223,11 @@ export const encodeVideo = async (
     ContentType: "video/mp4",
   });
 
-  const ffmpeg = spawn(FFMPEG_PATH, ffmpegArgs, { timeout: 270000 });
+  // ffmpeg timeout sits just under the Lambda's 900s limit (with headroom for
+  // the final S3 upload + teardown). The old 270s cap killed long re-encodes —
+  // e.g. a 1080p 10-bit HEVC source that must be transcoded to 8-bit h264 takes
+  // several minutes on a 2GB Lambda — so those silently failed and retried.
+  const ffmpeg = spawn(FFMPEG_PATH, ffmpegArgs, { timeout: 840000 });
   ffmpeg.stdout.pipe(stream);
 
   const stderrLines: string[] = [];
