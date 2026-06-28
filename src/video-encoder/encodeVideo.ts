@@ -17,11 +17,19 @@ type EncodeVideoParams = {
 type SourceProbe = {
   /** Video codec name (e.g. "h264", "hevc", "prores") or null if no video stream. */
   video: string | null;
+  /** Video stream pixel format (e.g. "yuv420p", "yuvj422p") or null. */
+  pixFmt: string | null;
   /** Audio codec name (e.g. "aac", "pcm_s16le") or null if no audio stream. */
   audio: string | null;
   /** Side-data rotation angle (0 / 90 / 180 / 270). */
   rotation: number;
 };
+
+// Pixel formats Apple's hardware H.264 decoder can play: 8-bit 4:2:0 only.
+// iOS (Safari on iPhone/iPad) rejects 4:2:2 / 4:4:4 / 10-bit H.264 even though
+// desktop browsers software-decode them — so we may stream-copy h264 ONLY when
+// it is already one of these, and otherwise re-encode down to yuv420p.
+const IOS_SAFE_PIX_FMTS = new Set(["yuv420p", "yuvj420p"]);
 
 /**
  * Probe the source in a single ffprobe pass:
@@ -35,7 +43,7 @@ type SourceProbe = {
 const probeSource = async (signedUrl: string): Promise<SourceProbe> => {
   const ffprobe = spawn(FFPROBE_PATH, [
     "-i", signedUrl,
-    "-show_entries", "stream=codec_type,codec_name:stream_side_data=rotation",
+    "-show_entries", "stream=codec_type,codec_name,pix_fmt:stream_side_data=rotation",
     "-v", "quiet",
     "-of", "json",
   ], { timeout: 60000 });
@@ -53,6 +61,7 @@ const probeSource = async (signedUrl: string): Promise<SourceProbe> => {
           streams: Array<{
             codec_type: string;
             codec_name: string;
+            pix_fmt?: string;
             side_data_list?: Array<{ rotation?: number }>;
           }>;
         };
@@ -64,6 +73,7 @@ const probeSource = async (signedUrl: string): Promise<SourceProbe> => {
           : 0;
         resolve({
           video: videoStream?.codec_name ?? null,
+          pixFmt: videoStream?.pix_fmt ?? null,
           audio: audioStream?.codec_name ?? null,
           rotation,
         });
@@ -158,11 +168,20 @@ export const encodeVideo = async (
   }
 
   const vfArgs = rotationToVf(probe.rotation);
-  const canCopyVideo = probe.video === "h264" && vfArgs.length === 0;
+  // Stream-copy h264 only when it is ALSO in an iOS-decodable pixel format
+  // (8-bit 4:2:0). Copying a High 4:2:2 / 4:4:4 / 10-bit h264 source produced
+  // files that played on desktop but not on iPhone — Apple's hardware decoder
+  // only handles 4:2:0. When the pix_fmt isn't iOS-safe we re-encode instead.
+  const canCopyVideo =
+    probe.video === "h264" &&
+    vfArgs.length === 0 &&
+    probe.pixFmt !== null &&
+    IOS_SAFE_PIX_FMTS.has(probe.pixFmt);
   const canCopyAudio = probe.audio === "aac"; // already AAC → stream-copy
 
   logger.debug("encode plan", {
     sourceVideo: probe.video,
+    sourcePixFmt: probe.pixFmt,
     sourceAudio: probe.audio,
     rotation: probe.rotation,
     canCopyVideo,
@@ -174,9 +193,13 @@ export const encodeVideo = async (
   //   video → h264 (either via copy when already h264, or libx264)
   //   audio → aac  (either via copy when already AAC, or aac encoder)
   // Silent sources stay silent — MSE handles that fine.
+  // On re-encode, force 8-bit 4:2:0 High profile so the result is decodable by
+  // iOS hardware (libx264 would otherwise preserve a 4:2:2/4:4:4/10-bit source
+  // pixel format, which iPhone Safari can't play). `-pix_fmt yuv420p` does the
+  // chroma downsample; `-profile:v high` keeps it explicit.
   const videoArgs = canCopyVideo
     ? ["-c:v", "copy"]
-    : ["-c:v", "libx264", "-preset", "fast", ...vfArgs];
+    : ["-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p", "-profile:v", "high", ...vfArgs];
 
   const audioArgs = probe.audio === null
     ? [] // no audio stream — don't specify -c:a
