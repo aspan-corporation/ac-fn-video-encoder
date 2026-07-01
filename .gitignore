@@ -10,3 +10,6 @@ cdk.out
 
 # Claude Code worktrees
 .claude/worktrees/
+
+# Test coverage output
+coverage/
