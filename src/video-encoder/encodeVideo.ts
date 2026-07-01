@@ -1,6 +1,11 @@
 import { AcContext, MetricUnit, S3Service } from "@aspan-corporation/ac-shared";
 import { spawn } from "child_process";
 import { invalidateCloudFrontPath } from "./invalidateCloudFront.js";
+import {
+  SOURCE_ETAG_METADATA_KEY,
+  normalizeEtag,
+  shouldSkipEncode,
+} from "./encodeSkip.js";
 
 const FFMPEG_PATH = "/opt/bin/ffmpeg";
 const FFPROBE_PATH = "/opt/bin/ffprobe";
@@ -126,31 +131,50 @@ export const encodeVideo = async (
   logger.debug("VideoEncodingsStarted", { sourceKey });
   metrics.addMetric("VideoEncodingsStarted", MetricUnit.Count, 1);
 
+  // Identify the exact source bytes so we can tell whether an existing encoded
+  // output was produced from this same version. HeadObject is a few-ms call.
+  const sourceHead = await sourceS3Service
+    .headObject({ Bucket: sourceBucket, Key: sourceKey })
+    .catch(() => undefined); // defensive: never block the encode on this probe
+  const sourceEtag = normalizeEtag(sourceHead?.ETag);
+
+  // Head the destination once. Its existence drives the CDN-invalidation
+  // decision below; the stored `source-etag` metadata lets us skip re-encoding
+  // entirely when the output is already current for this source.
+  //   - existed  → re-encode (overwriting): invalidate to evict stale cache
+  //   - !existed → first-time encode: no cache entry to evict, skip invalidate
+  // Trade-off on the invalidation skip: if anything fetched the destination URL
+  // between source upload and encoder completion, CloudFront may have cached a
+  // 404 (default negative TTL 10s) that lingers until natural expiry.
+  const destinationHead = await destinationS3Service
+    .headObject({ Bucket: destinationBucket, Key: destinationKey })
+    .catch(() => undefined);
+  const destinationExisted = destinationHead !== undefined;
+  const destinationSourceEtag = normalizeEtag(
+    destinationHead?.Metadata?.[SOURCE_ETAG_METADATA_KEY],
+  );
+
+  // ── Skip guard ──────────────────────────────────────────────────────────
+  // A re-dispatch of the whole library (or a duplicate S3 event) arrives with
+  // a fresh SQS messageId, so the idempotency layer does NOT dedupe it. Without
+  // this guard every such replay re-encodes every video (minutes of 2GB Lambda
+  // each). When the encoded output already carries the current source ETag, the
+  // bytes are unchanged and there is nothing to do. A genuine re-upload changes
+  // the source ETag, so real edits still re-encode.
+  if (shouldSkipEncode({ destinationExisted, sourceEtag, destinationSourceEtag })) {
+    logger.info("Skipping encode — destination already current for source", {
+      sourceKey,
+      destinationKey,
+      sourceEtag,
+    });
+    metrics.addMetric("VideoEncodingsSkippedCurrent", MetricUnit.Count, 1);
+    return;
+  }
+
   const signedSourceUrl = await sourceS3Service.getSignedUrl({
     Bucket: sourceBucket,
     Key: sourceKey,
   });
-
-  // Check upfront whether the encoded destination already exists. We use
-  // this signal AFTER the upload to decide whether to invalidate the CDN:
-  //   - existed  → re-encode (overwriting): invalidate to evict stale cache
-  //   - !existed → first-time encode: no cache entry to evict, skip invalidate
-  //
-  // Saves a CreateInvalidation API call per first-time upload (cheap at our
-  // scale, but free is free and it keeps the invalidation history clean).
-  // The HeadObject is a few-ms add to the encode budget — negligible.
-  //
-  // Trade-off: if anything fetched the destination URL between source
-  // upload and encoder completion, CloudFront may have cached a 404 (default
-  // negative-cache TTL is 10s). That stale 404 will linger until natural
-  // TTL expiry instead of being cleared by an invalidation. Acceptable for
-  // first-time encodes where users typically aren't watching for the file.
-  const destinationExisted = await destinationS3Service
-    .checkIfObjectExists({
-      Bucket: destinationBucket,
-      Key: destinationKey,
-    })
-    .catch(() => false); // defensive: a failed check should not block encoding
 
   // ── Upfront source probe ────────────────────────────────────────────────
   const probe = await probeSource(signedSourceUrl);
@@ -221,6 +245,11 @@ export const encodeVideo = async (
     Bucket: destinationBucket,
     Key: destinationKey,
     ContentType: "video/mp4",
+    // Stamp the source ETag so a future re-dispatch can detect this output is
+    // already current and skip the encode (see the skip guard above).
+    ...(sourceEtag
+      ? { Metadata: { [SOURCE_ETAG_METADATA_KEY]: sourceEtag } }
+      : {}),
   });
 
   // ffmpeg timeout sits just under the Lambda's 900s limit (with headroom for
