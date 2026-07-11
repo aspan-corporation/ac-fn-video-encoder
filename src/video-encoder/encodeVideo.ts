@@ -46,16 +46,26 @@ const IOS_SAFE_PIX_FMTS = new Set(["yuv420p", "yuvj420p"]);
  * audio-only mistakenly uploaded with .mov → video=null).
  */
 const probeSource = async (signedUrl: string): Promise<SourceProbe> => {
-  const ffprobe = spawn(FFPROBE_PATH, [
-    "-i", signedUrl,
-    "-show_entries", "stream=codec_type,codec_name,pix_fmt:stream_side_data=rotation",
-    "-v", "quiet",
-    "-of", "json",
-  ], { timeout: 60000 });
+  const ffprobe = spawn(
+    FFPROBE_PATH,
+    [
+      "-i",
+      signedUrl,
+      "-show_entries",
+      "stream=codec_type,codec_name,pix_fmt:stream_side_data=rotation",
+      "-v",
+      "quiet",
+      "-of",
+      "json",
+    ],
+    { timeout: 60000 },
+  );
 
   return new Promise((resolve, reject) => {
     let output = "";
-    ffprobe.stdout.on("data", (d) => { output += d.toString(); });
+    ffprobe.stdout.on("data", (d) => {
+      output += d.toString();
+    });
     ffprobe.on("close", (code) => {
       if (code !== 0) {
         reject(new Error(`ffprobe exited with code ${code}`));
@@ -70,12 +80,19 @@ const probeSource = async (signedUrl: string): Promise<SourceProbe> => {
             side_data_list?: Array<{ rotation?: number }>;
           }>;
         };
-        const videoStream = parsed.streams.find((s) => s.codec_type === "video");
-        const audioStream = parsed.streams.find((s) => s.codec_type === "audio");
-        const rawRotation = videoStream?.side_data_list?.find((d) => d.rotation !== undefined)?.rotation;
-        const rotation = typeof rawRotation === "number"
-          ? ((rawRotation % 360) + 360) % 360
-          : 0;
+        const videoStream = parsed.streams.find(
+          (s) => s.codec_type === "video",
+        );
+        const audioStream = parsed.streams.find(
+          (s) => s.codec_type === "audio",
+        );
+        const rawRotation = videoStream?.side_data_list?.find(
+          (d) => d.rotation !== undefined,
+        )?.rotation;
+        const rotation =
+          typeof rawRotation === "number"
+            ? ((rawRotation % 360) + 360) % 360
+            : 0;
         resolve({
           video: videoStream?.codec_name ?? null,
           pixFmt: videoStream?.pix_fmt ?? null,
@@ -88,16 +105,6 @@ const probeSource = async (signedUrl: string): Promise<SourceProbe> => {
     });
     ffprobe.on("error", reject);
   });
-};
-
-/** Map rotation angle to FFmpeg transpose filter arguments. */
-const rotationToVf = (degrees: number): string[] => {
-  switch (degrees) {
-    case 90:  return ["-vf", "transpose=1"];
-    case 180: return ["-vf", "transpose=1,transpose=1"];
-    case 270: return ["-vf", "transpose=2"];
-    default:  return [];
-  }
 };
 
 /**
@@ -161,7 +168,9 @@ export const encodeVideo = async (
   // each). When the encoded output already carries the current source ETag, the
   // bytes are unchanged and there is nothing to do. A genuine re-upload changes
   // the source ETag, so real edits still re-encode.
-  if (shouldSkipEncode({ destinationExisted, sourceEtag, destinationSourceEtag })) {
+  if (
+    shouldSkipEncode({ destinationExisted, sourceEtag, destinationSourceEtag })
+  ) {
     logger.info("Skipping encode — destination already current for source", {
       sourceKey,
       destinationKey,
@@ -187,18 +196,21 @@ export const encodeVideo = async (
     metrics.addMetric("VideoEncodingsSourceUnencodable", MetricUnit.Count, 1);
     throw new Error(
       `Source ${sourceKey} has no video stream (audio=${probe.audio ?? "none"}). ` +
-      `Cannot encode to MSE-compatible MP4. Will be routed to DLQ.`,
+        `Cannot encode to MSE-compatible MP4. Will be routed to DLQ.`,
     );
   }
 
-  const vfArgs = rotationToVf(probe.rotation);
   // Stream-copy h264 only when it is ALSO in an iOS-decodable pixel format
   // (8-bit 4:2:0). Copying a High 4:2:2 / 4:4:4 / 10-bit h264 source produced
   // files that played on desktop but not on iPhone — Apple's hardware decoder
   // only handles 4:2:0. When the pix_fmt isn't iOS-safe we re-encode instead.
+  // A rotated source also forces a re-encode: a stream-copy preserves the
+  // original Display Matrix side-data unchanged, and MSE-based playback in
+  // browsers doesn't reliably respect that rotation matrix — the pixels need
+  // to be physically rotated, which only happens on the re-encode path.
   const canCopyVideo =
     probe.video === "h264" &&
-    vfArgs.length === 0 &&
+    probe.rotation === 0 &&
     probe.pixFmt !== null &&
     IOS_SAFE_PIX_FMTS.has(probe.pixFmt);
   const canCopyAudio = probe.audio === "aac"; // already AAC → stream-copy
@@ -221,22 +233,45 @@ export const encodeVideo = async (
   // iOS hardware (libx264 would otherwise preserve a 4:2:2/4:4:4/10-bit source
   // pixel format, which iPhone Safari can't play). `-pix_fmt yuv420p` does the
   // chroma downsample; `-profile:v high` keeps it explicit.
+  //
+  // NO manual rotation filter here (deliberately — a `-vf transpose=N` was
+  // tried and reverted, see git history/memory): ffmpeg's decoder applies a
+  // source's Display Matrix rotation automatically by default ("autorotate")
+  // when decoding for a re-encode. Adding a manual transpose on top of that
+  // double-applies the rotation and rotates the output back to the WRONG
+  // orientation — confirmed by direct testing (encoded output stayed at the
+  // source's raw, un-rotated dimensions instead of the rotation-corrected
+  // ones). Forcing libx264 (never copy) via `canCopyVideo` above is what
+  // guarantees the rotation actually gets baked into the output pixels.
   const videoArgs = canCopyVideo
     ? ["-c:v", "copy"]
-    : ["-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p", "-profile:v", "high", ...vfArgs];
+    : [
+        "-c:v",
+        "libx264",
+        "-preset",
+        "fast",
+        "-pix_fmt",
+        "yuv420p",
+        "-profile:v",
+        "high",
+      ];
 
-  const audioArgs = probe.audio === null
-    ? [] // no audio stream — don't specify -c:a
-    : canCopyAudio
-      ? ["-c:a", "copy"]
-      : ["-c:a", "aac", "-ar", "48000", "-ac", "2", "-b:a", "128k"];
+  const audioArgs =
+    probe.audio === null
+      ? [] // no audio stream — don't specify -c:a
+      : canCopyAudio
+        ? ["-c:a", "copy"]
+        : ["-c:a", "aac", "-ar", "48000", "-ac", "2", "-b:a", "128k"];
 
   const ffmpegArgs = [
-    "-i", signedSourceUrl,
+    "-i",
+    signedSourceUrl,
     ...videoArgs,
     ...audioArgs,
-    "-movflags", "frag_keyframe+empty_moov+default_base_moof",
-    "-f", "mp4",
+    "-movflags",
+    "frag_keyframe+empty_moov+default_base_moof",
+    "-f",
+    "mp4",
     "pipe:1",
   ];
 
@@ -270,8 +305,18 @@ export const encodeVideo = async (
 
   let settled = false;
   const exitCode = await new Promise((resolve, reject) => {
-    ffmpeg.on("close", (code) => { if (!settled) { settled = true; resolve(code); } });
-    ffmpeg.on("error", (err) => { if (!settled) { settled = true; reject(err); } });
+    ffmpeg.on("close", (code) => {
+      if (!settled) {
+        settled = true;
+        resolve(code);
+      }
+    });
+    ffmpeg.on("error", (err) => {
+      if (!settled) {
+        settled = true;
+        reject(err);
+      }
+    });
   });
 
   if (exitCode !== 0) {
@@ -287,9 +332,14 @@ export const encodeVideo = async (
   // Non-fatal — failures are logged but don't error out the encode, since
   // the S3 write has already succeeded.
   if (destinationExisted) {
-    await invalidateCloudFrontPath(destinationKey, { logger, metrics } as AcContext);
+    await invalidateCloudFrontPath(destinationKey, {
+      logger,
+      metrics,
+    } as AcContext);
   } else {
-    logger.debug("Skipping CloudFront invalidation — first-time encode", { destinationKey });
+    logger.debug("Skipping CloudFront invalidation — first-time encode", {
+      destinationKey,
+    });
     metrics.addMetric("CloudFrontInvalidationsSkipped", MetricUnit.Count, 1);
   }
 
