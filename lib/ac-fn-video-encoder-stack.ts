@@ -82,6 +82,13 @@ export class AcFnVideoEncoderStack extends cdk.Stack {
               this,
               "/ac/cloudfront/distribution-id",
             ),
+          // In-account diary bucket holding diary-uploaded videos. Read with
+          // the Lambda's own role (granted below), not the cross-account
+          // media role.
+          AC_DIARY_BUCKET_NAME: ssm.StringParameter.valueForStringParameter(
+            this,
+            "/ac/storage/diary-bucket-name",
+          ),
         },
       },
     );
@@ -164,16 +171,31 @@ export class AcFnVideoEncoderStack extends cdk.Stack {
     // Allow Lambda to invalidate the encoded video's CloudFront path after
     // overwriting an object in the thumbs bucket. Without this, edge caches
     // continue serving the previous version until natural TTL expiry.
-    const cloudFrontDistributionId = ssm.StringParameter.valueForStringParameter(
-      this,
-      "/ac/cloudfront/distribution-id",
-    );
+    const cloudFrontDistributionId =
+      ssm.StringParameter.valueForStringParameter(
+        this,
+        "/ac/cloudfront/distribution-id",
+      );
     videoEncoderProcessor.processor.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ["cloudfront:CreateInvalidation"],
         resources: [
           `arn:aws:cloudfront::${this.account}:distribution/${cloudFrontDistributionId}`,
         ],
+      }),
+    );
+
+    // Allow Lambda to read diary-uploaded source videos from the in-account
+    // diary bucket (the cross-account media role can't reach it).
+    const diaryBucketArn = ssm.StringParameter.valueForStringParameter(
+      this,
+      "/ac/storage/diary-bucket-arn",
+    );
+
+    videoEncoderProcessor.processor.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["s3:GetObject"],
+        resources: [`${diaryBucketArn}/*`],
       }),
     );
 
