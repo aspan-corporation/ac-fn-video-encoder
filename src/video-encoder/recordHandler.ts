@@ -13,21 +13,13 @@ const destinationBucket = assertEnvVar("DESTINATION_BUCKET_NAME");
 const metaTableName = assertEnvVar("AC_TAU_MEDIA_META_TABLE_NAME");
 const TAG_HIDDEN = "ac:ediacara:hidden";
 const sfnClient = new SFNClient({});
-// In-account bucket holding diary-uploaded videos. When the event names this
-// bucket the source must be read with the Lambda's own role, not the
-// cross-account media read-access role.
-const diaryBucketName = process.env.AC_DIARY_BUCKET_NAME;
 
 export const recordHandler = async (
   record: SQSRecord,
   context: AcContext,
 ): Promise<void> => {
-  const {
-    sourceS3Service,
-    destinationS3Service,
-    dynamoDBService,
-    localS3Service,
-  } = context.acServices || {};
+  const { sourceS3Service, destinationS3Service, dynamoDBService } =
+    context.acServices || {};
   assert(sourceS3Service, "s3Service is required in servicesContext");
   assert(
     destinationS3Service,
@@ -69,17 +61,9 @@ export const recordHandler = async (
 
   const destinationKey = getEncodedVideoKey({ key: sourceKey });
 
-  // Pick the read client by source bucket: the diary bucket lives in this
-  // account (Lambda's own role); everything else is the cross-account media
-  // bucket reached via the assumed read-access role.
-  const readS3Service =
-    diaryBucketName && sourceBucket === diaryBucketName
-      ? (localS3Service ?? sourceS3Service)
-      : sourceS3Service;
-
   await encodeVideo(
     {
-      sourceS3Service: readS3Service,
+      sourceS3Service,
       sourceBucket,
       sourceKey,
       destinationS3Service,

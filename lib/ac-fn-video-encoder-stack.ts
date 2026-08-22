@@ -72,23 +72,11 @@ export class AcFnVideoEncoderStack extends cdk.Stack {
               this,
               "/ac/data/meta-table-name",
             ),
-          AC_TAU_MEDIA_MEDIA_BUCKET_ACCESS_ROLE_ARN:
-            ssm.StringParameter.valueForStringParameter(
-              this,
-              "/ac/iam/media-bucket-access-role-arn",
-            ),
           CLOUDFRONT_DISTRIBUTION_ID:
             ssm.StringParameter.valueForStringParameter(
               this,
               "/ac/cloudfront/distribution-id",
             ),
-          // In-account diary bucket holding diary-uploaded videos. Read with
-          // the Lambda's own role (granted below), not the cross-account
-          // media role.
-          AC_DIARY_BUCKET_NAME: ssm.StringParameter.valueForStringParameter(
-            this,
-            "/ac/storage/diary-bucket-name",
-          ),
         },
       },
     );
@@ -142,16 +130,6 @@ export class AcFnVideoEncoderStack extends cdk.Stack {
       }),
     );
 
-    // Allow Lambda to assume the S3 media read access role
-    videoEncoderProcessor.processor.addToRolePolicy(
-      new iam.PolicyStatement({
-        actions: ["sts:AssumeRole"],
-        resources: [
-          `arn:aws:iam::${this.account}:role/aspan-corporation/ac-s3-media-read-access`,
-        ],
-      }),
-    );
-
     // Allow Lambda to put objects to thumbs bucket
     const thumbsBucketArn = ssm.StringParameter.valueForStringParameter(
       this,
@@ -185,9 +163,12 @@ export class AcFnVideoEncoderStack extends cdk.Stack {
       }),
     );
 
-    // Allow Lambda to read diary-uploaded source videos from the in-account
-    // diary bucket (the cross-account media role can't reach it).
-    const diaryBucketArn = ssm.StringParameter.valueForStringParameter(
+    // Read grant for the consolidated media bucket (media/ and diary/ alike —
+    // /ac/storage/diary-bucket-arn resolves to the same bucket as
+    // /ac/storage/media-bucket-name since the cutover to MediaBucket). No
+    // cross-account assume-role needed any more; the Lambda's own execution
+    // role reads it directly.
+    const mediaBucketArn = ssm.StringParameter.valueForStringParameter(
       this,
       "/ac/storage/diary-bucket-arn",
     );
@@ -195,7 +176,7 @@ export class AcFnVideoEncoderStack extends cdk.Stack {
     videoEncoderProcessor.processor.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ["s3:GetObject"],
-        resources: [`${diaryBucketArn}/*`],
+        resources: [`${mediaBucketArn}/*`],
       }),
     );
 
